@@ -9,6 +9,16 @@ import { ChatHeader } from "./ChatHeader";
 import { useToast } from "@/hooks/useToast";
 
 const CONVERSATION_KEY = "chat-conversation-id";
+const USER_ID_KEY = "chat-user-id";
+
+function getUserId(): string {
+  let userId = localStorage.getItem(USER_ID_KEY);
+  if (!userId) {
+    userId = crypto.randomUUID();
+    localStorage.setItem(USER_ID_KEY, userId);
+  }
+  return userId;
+}
 
 export function ChatWindow() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -32,7 +42,10 @@ export function ChatWindow() {
     try {
       const res = await fetch("/api/chat/conversation", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-id": getUserId(),
+        },
       });
       const data = await res.json();
       if (data.success) {
@@ -52,7 +65,11 @@ export function ChatWindow() {
 
   const fetchHistory = async (convId: string) => {
     try {
-      const res = await fetch(`/api/chat/history/${convId}`);
+      const res = await fetch(`/api/chat/history/${convId}`, {
+        headers: {
+          "x-user-id": getUserId(),
+        },
+      });
       const data = await res.json();
       if (data.success) {
         setMessages(data.conversation.messages);
@@ -82,7 +99,10 @@ export function ChatWindow() {
       try {
         const res = await fetch("/api/chat/message", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "x-user-id": getUserId(),
+          },
           body: JSON.stringify({ message: content, conversationId }),
         });
         const data = await res.json();

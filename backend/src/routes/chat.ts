@@ -8,17 +8,25 @@ const router = Router();
 // POST /api/chat/message
 router.post("/message", async (req: Request, res: Response) => {
   try {
+    const userId = req.headers["x-user-id"] as string;
+    if (!userId || typeof userId !== "string" || userId.length < 8) {
+      res.status(401).json({ success: false, errors: ["Unauthorized — missing or invalid user ID. Please refresh the page."] });
+      return;
+    }
+
     const parsed = sendMessageSchema.safeParse(req.body);
 
     if (!parsed.success) {
-      const errors = parsed.error.issues.map((issue) => issue.message);
+      const errors = parsed.error.issues.map(
+        (issue) => `[${issue.path.join(".")}] ${issue.message}`
+      );
       res.status(400).json({ success: false, errors });
       return;
     }
 
     const { message, conversationId } = parsed.data;
 
-    // Verify conversation exists
+    // Verify conversation exists and belongs to this user
     const conversation = await prisma.conversation.findUnique({
       where: { id: conversationId },
     });
@@ -26,8 +34,14 @@ router.post("/message", async (req: Request, res: Response) => {
     if (!conversation) {
       res.status(404).json({
         success: false,
-        errors: ["Conversation not found"],
+        errors: ["Conversation not found — it may have been deleted or the ID is invalid."],
       });
+      return;
+    }
+
+    // 🔐 Ownership check
+    if (conversation.userId !== userId) {
+      res.status(403).json({ success: false, errors: ["Access denied — this conversation does not belong to you."] });
       return;
     }
 
@@ -92,7 +106,7 @@ router.post("/message", async (req: Request, res: Response) => {
     console.error("Unexpected error in chat message:", error);
     res.status(500).json({
       success: false,
-      errors: ["An unexpected error occurred. Please try again."],
+      errors: ["Something went wrong on our end. Please try again in a moment."],
     });
   }
 });
@@ -100,6 +114,12 @@ router.post("/message", async (req: Request, res: Response) => {
 // GET /api/chat/history/:conversationId
 router.get("/history/:conversationId", async (req: Request, res: Response) => {
   try {
+    const userId = req.headers["x-user-id"] as string;
+    if (!userId || typeof userId !== "string" || userId.length < 8) {
+      res.status(401).json({ success: false, errors: ["Unauthorized — missing or invalid user ID. Please refresh the page."] });
+      return;
+    }
+
     const { conversationId } = req.params;
 
     const conversation = await prisma.conversation.findUnique({
@@ -112,7 +132,13 @@ router.get("/history/:conversationId", async (req: Request, res: Response) => {
     });
 
     if (!conversation) {
-      res.status(404).json({ success: false, errors: ["Conversation not found"] });
+      res.status(404).json({ success: false, errors: ["Conversation not found — it may have been deleted or the ID is invalid."] });
+      return;
+    }
+
+    // 🔐 Ownership check
+    if (conversation.userId !== userId) {
+      res.status(403).json({ success: false, errors: ["Access denied — this conversation does not belong to you."] });
       return;
     }
 
@@ -124,16 +150,22 @@ router.get("/history/:conversationId", async (req: Request, res: Response) => {
     console.error("Error fetching conversation:", error);
     res.status(500).json({
       success: false,
-      errors: ["Failed to fetch conversation history."],
+      errors: ["Failed to fetch conversation history. Please try again later."],
     });
   }
 });
 
 // POST /api/chat/conversation
-router.post("/conversation", async (_req: Request, res: Response) => {
+router.post("/conversation", async (req: Request, res: Response) => {
   try {
+    const userId = req.headers["x-user-id"] as string;
+    if (!userId || typeof userId !== "string" || userId.length < 8) {
+      res.status(401).json({ success: false, errors: ["Unauthorized — missing or invalid user ID. Please refresh the page."] });
+      return;
+    }
+
     const conversation = await prisma.conversation.create({
-      data: {},
+      data: { userId },
     });
 
     res.status(201).json({
@@ -144,7 +176,7 @@ router.post("/conversation", async (_req: Request, res: Response) => {
     console.error("Error creating conversation:", error);
     res.status(500).json({
       success: false,
-      errors: ["Failed to create conversation."],
+      errors: ["Failed to create a new conversation. Please try again."],
     });
   }
 });

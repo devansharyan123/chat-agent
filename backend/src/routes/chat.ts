@@ -61,7 +61,7 @@ router.post("/message", async (req: Request, res: Response) => {
       take: 10,
     });
 
-    const history = recentMessages.map((msg) => ({
+    const history = recentMessages.map((msg: { sender: string; content: string }) => ({
       sender: msg.sender as "USER" | "AI",
       content: msg.content,
     }));
